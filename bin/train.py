@@ -15,7 +15,7 @@ import torch
 from torch.utils.data import DataLoader
 
 # setup locaml
-from nerf import NeRF
+from model import NeRF
 import data_modules as DataModules
 
 def main(args, hparams):
@@ -28,8 +28,8 @@ def main(args, hparams):
 
     checkpoint_path.mkdir(parents=True, exist_ok=True)
 
-    checkpoint_callback = ModelCheckpoint(filepath=checkpoint_path, monitor='val/loss', save_top_k=-1, save_last=True)
-    logger = TensorBoardLogger(log_path, name=experiment_name)
+    checkpoint_callback = ModelCheckpoint(filepath=checkpoint_path, monitor='val/loss', save_top_k=1, save_last=True)
+    logger = TensorBoardLogger(log_path, name=experiment_name, version=0)
 
     last_ckpt = checkpoint_path / 'last.ckpt' if args.resume else None
     if (last_ckpt is None) or (not (last_ckpt.exists())):
@@ -47,7 +47,7 @@ def main(args, hparams):
                                          checkpoint_callback=checkpoint_callback)
 
     # setup data module
-    data_module = getattr(DataModules, args.dataset)(data_path, options=vars(args))
+    data_module = getattr(DataModules, args.dataset)(data_path, options=vars(args), num_views=1)
     data_module.prepare_data()
     data_module.setup('fit')
 

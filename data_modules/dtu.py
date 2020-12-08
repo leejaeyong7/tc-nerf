@@ -16,6 +16,8 @@ class DTU(BaseDataModule):
                 106, 117]
     test_sets = [1, 4, 9, 10, 11, 12, 13, 15, 23, 24, 29, 32, 33, 34, 48, 49,
                  62, 75, 77, 110, 114, 118]
+    train_sets = [2]
+    val_sets = [2]
 
     def __init__(self, dataset_dir, num_views=10, options={}):
         super(DTU, self).__init__(dataset_dir,  num_views, options=options)

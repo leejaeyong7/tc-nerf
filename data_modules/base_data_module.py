@@ -54,7 +54,7 @@ class BaseDataModule(pl.LightningDataModule):
     def pair_file(self):
         return 'pair.txt'
 
-    def get_samples_from_sets(self, target_sets, num_views, use_random_samples=False):
+    def get_samples_from_sets(self, target_sets, num_views, train=False):
         # iterate over sets
         samples = []
         for target_set in target_sets:
@@ -71,6 +71,14 @@ class BaseDataModule(pl.LightningDataModule):
             pairs = self.parse_pairs(pair_file)
             all_image_ids = list(pairs.keys())
             for ref_image_id, neighbor_list in pairs.items():
+                if(train):
+                    if (ref_image_id % 12) == 0:
+                        continue
+                else:
+                    if (ref_image_id % 12) != 0:
+                        continue
+
+
                 neigh_image_ids = [ref_image_id] + neighbor_list
 
                 neigh_image_hash = {}
@@ -82,19 +90,7 @@ class BaseDataModule(pl.LightningDataModule):
                     if not (image_id in neigh_image_hash):
                         remaining_hash[image_id] = image_id
                 remainig_ids = list(remaining_hash.keys())
-                if use_random_samples and (self.options.get('random_views')) and (self.options.get('random_views') > 0):
-                    num_rand = self.options['random_views']
-                    num_fixed = num_views - num_rand
-                    assert num_fixed >= 3
-                    assert num_rand >= 1
-
-                    fixed_ids = neigh_image_ids[:num_fixed]
-                    num_rand = min(num_rand, len(remainig_ids))
-                    rand_ids = random.sample(remainig_ids, num_rand)
-
-                    selected_image_ids = fixed_ids + rand_ids
-                else:
-                    selected_image_ids = neigh_image_ids[:num_views]
+                selected_image_ids = neigh_image_ids[:num_views]
 
 
                 sample = {

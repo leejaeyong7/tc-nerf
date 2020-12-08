@@ -8,4 +8,41 @@ default_options = {
         'choices': ['SGD', 'Ranger', 'Adam'],
         'default': 'Adam'
     },
+    'scheduler_last_epoch':{
+        'type': int,
+        'default': 5
+    },
+    'scheduler_rate':{
+        'type': float,
+        'default': 0.7
+    },
+    'nerf_num_depths':{
+        'type': int,
+        'default': 40
+    },
+    'nerf_network_depth':{
+        'type': int,
+        'default': 8
+    },
+    'nerf_channels':{
+        'type': int,
+        'default': 256
+    },
+    'nerf_skips':{
+        'type': int,
+        'nargs':'*',
+        'default': [4]
+    },
+    'nerf_view_dirs':{
+        'type': bool,
+        'default': True
+    },
+    'nerf_point_encode':{
+        'type': int,
+        'default': 6
+    },
+    'nerf_dir_encode':{
+        'type': int,
+        'default': 4
+    }
 }
