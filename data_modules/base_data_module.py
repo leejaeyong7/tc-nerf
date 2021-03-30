@@ -16,6 +16,7 @@ from torchvision import transforms
 from torch.utils.data import random_split, DataLoader
 from pathlib import Path
 from .sample_loader import SampleLoader
+from .ray_loader import RayLoader
 
 class BaseDataModule(pl.LightningDataModule):
     """
@@ -119,7 +120,7 @@ class BaseDataModule(pl.LightningDataModule):
                 train_sets = self.get_train_sets()
                 num_views = self.num_views if not self.options.get('num_train_views') else self.options['num_train_views']
                 train_samples = self.get_samples_from_sets(train_sets, num_views, True)
-                self.train_dataset = SampleLoader(train_samples, self.options)
+                self.train_dataset = RayLoader(train_samples, self.options)
             except Exception as e:
                 print(repr(e))
                 raise Exception("Training data must be present!")

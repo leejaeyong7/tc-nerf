@@ -34,11 +34,7 @@ class DTU(BaseDataModule):
 
     def get_image_path(self, image_folder: Path, image_id: int) -> Path:
         ''' returns full path to image file '''
-        if(self.mode == 'train'):
-            light_id = random.randint(0, 6)
-        else:
-            light_id = 3
-
+        light_id = 3
         image_name = '{:08d}_{}.png'.format(image_id, light_id)
         return image_folder / image_name
 
@@ -71,3 +67,7 @@ class DTULR(DTU):
         K *= 4
         K[2, 2] = 1
         return K, E, tokens
+
+class DTUHR(DTU):
+    def __init__(self, dataset_dir, num_views=10, options={}):
+        super(DTULR, self).__init__(dataset_dir / 'dtu_mine',  num_views, {**options})

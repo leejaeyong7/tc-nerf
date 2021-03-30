@@ -178,6 +178,26 @@ class Camera:
         projected = from_homogeneous(points)
         return self.grid_K @ projected - 1
 
+    def init(self, N, ranges):
+        dev = self.K.device
+        min_d, max_d = ranges
+        H, W = self.H, self.W
+        Rt = self.Rt
+
+        depths = torch.linspace(1 / max_d, 1 / min_d, N + 1, device=dev).view(1, 1, 1, -1)
+        min_ds = depths[..., :-1]
+        max_ds = depths[..., 1:]
+        sampled_depths = 1/ (torch.rand((1, H, W, N), dtype=torch.float, device=dev) * (max_ds - min_ds) + min_ds)
+        nhwd = sampled_depths.permute(3, 1, 2, 0)
+        rs = self.camera_rays()
+
+        # NxHxWx3 world points, 1xHxWx3 directions
+        dirs = to_vector(Rt @ from_vector(self.camera_rays()))
+        return nhwd, dirs 
+
+
+
+
     def sample(self, N, ranges):
         '''
         Given min/max ranges of depths, return sampled depths based on uniform distrb.
@@ -186,35 +206,46 @@ class Camera:
         min_d, max_d = ranges
         H, W = self.H, self.W
         Rt = self.Rt
-        depths = torch.linspace(min_d, max_d, N + 1, device=dev).view(1, 1, 1, -1)
+        depths = torch.linspace(1 / max_d, 1 / min_d, N + 1, device=dev).view(1, 1, 1, -1)
         min_ds = depths[..., :-1]
         max_ds = depths[..., 1:]
         # 1xHxWxN
-        sampled_depths = torch.rand((1, H, W, N), dtype=torch.float, device=dev) * (max_ds - min_ds) + min_ds
+        sampled_depths = 1/ (torch.rand((1, H, W, N), dtype=torch.float, device=dev) * (max_ds - min_ds) + min_ds)
         nhwd = sampled_depths.permute(3, 1, 2, 0)
+        rs = self.camera_rays()
 
         # NxHxWx3 world points, 1xHxWx3 directions
         pts = self.back_project(nhwd)
         dirs = to_vector(Rt @ from_vector(self.camera_rays()))
 
+        # dirs = rs
+        # pts = rs * nhwd
+
         return pts, nhwd, dirs 
 
-    def render(self, rgb, alpha, depths):
-        # alpha = NxHxWx1
+    def render(self, rgb, sigma, depths, add_noise=False):
+        # sigma = NxHxWx1
         # depths = NxHxWx1
         # rgb = NxHxWx3
-        alpha = NF.relu(alpha)
-        rgb = torch.sigmoid(rgb)
+        noise_std = 1
+        if(add_noise):
+            noise = torch.randn_like(sigma) * noise_std
+        else:
+            noise = 0.0
+        sig = NF.relu(sigma + noise) + 1e-10
         dev = self.K.device
         one_e_10 = torch.ones_like(depths[:1]) * 1e10
         dists = torch.cat((depths[1:] - depths[:-1], one_e_10), 0)
+        # alpha = 1 - (-sig * dists)
+        # Ti = alpha.clone().cumsum(0).roll(1, 0).exp()
+        # Ti[0] = 1
+        # w  = Ti * (1 - alpha).exp()
 
-        a = 1 - (-alpha * dists).exp()
-        t = (1 - a + 1e-10).cumprod(0).roll(1, 0)
-        t[0] = 1
-        w = a * t
+        alpha = 1 - (-sig * dists).exp()
+        Ti = (1 - alpha).cumprod(0).roll(1, 0)
+        Ti[0] = 1
+        w = alpha * Ti
 
         rgb_map = (w * rgb).sum(0)
         depth_map = (w * depths).sum(0)
-        acc_map = w.sum(0)
-        return rgb_map, depth_map, acc_map
+        return rgb_map, depth_map, w

@@ -1,19 +1,25 @@
 import torch
-import torch.nn as nn
-import math
+from torch import nn
 
-# Positional encoding (section 5.1)
 class PositionalEncoding(nn.Module):
-    def __init__(self, L):
+    def __init__(self, N_freqs, logscale=True):
+        """
+        Defines a function that embeds x to (x, sin(2^k x), cos(2^k x), ...)
+        in_channels: number of input channels (3 for both xyz and direction)
+        """
         super(PositionalEncoding, self).__init__()
-        self.L= L
-        
-    def forward(self, inputs):
-        '''
-        '''
-        L = self.L
-        encoded = []
-        for l in range(L):
-            encoded.append(torch.sin((2 ** l * math.pi) * inputs))
-            encoded.append(torch.cos((2 ** l * math.pi) * inputs))
-        return torch.cat(encoded, -1)
+        self.N_freqs = N_freqs
+        self.funcs = [torch.sin, torch.cos]
+
+        if logscale:
+            self.freq_bands = 2**torch.linspace(0, N_freqs-1, N_freqs)
+        else:
+            self.freq_bands = torch.linspace(1, 2**(N_freqs-1), N_freqs)
+
+    def forward(self, x):
+        out = [x]
+        for freq in self.freq_bands:
+            for func in self.funcs:
+                out += [func(freq*x)]
+
+        return torch.cat(out, -1)

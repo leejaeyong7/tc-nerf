@@ -18,7 +18,7 @@ default_options = {
     },
     'nerf_num_depths':{
         'type': int,
-        'default': 40
+        'default': 32
     },
     'nerf_network_depth':{
         'type': int,
@@ -33,13 +33,9 @@ default_options = {
         'nargs':'*',
         'default': [4]
     },
-    'nerf_view_dirs':{
-        'type': bool,
-        'default': True
-    },
     'nerf_point_encode':{
         'type': int,
-        'default': 6
+        'default': 10
     },
     'nerf_dir_encode':{
         'type': int,

@@ -63,6 +63,13 @@ class SampleLoader(Dataset):
         else:
             batch_images = torch.stack(list_images)
 
+
+        # rescale so that the depth becomes clamped
+        scale = ranges[0] * 0.75
+        ranges[0] /= scale 
+        ranges[1] /= scale 
+        torch_extrinsics[:, :, 3] /= scale 
+
         # if self.get_depth:
         # on training, additionally load in depths
         data = {
@@ -71,6 +78,8 @@ class SampleLoader(Dataset):
             'extrinsics': torch_extrinsics,
             'ranges': ranges
         }
+
+
         if ('depths' in sample) and (len(sample['depths']) > 0) and (not self.options.get('skip_depth')):
             depths = [self.load_depth(dp) for dp in sample['depths']]
             list_depths = [torch.from_numpy(depth).unsqueeze(0) for depth in depths]
@@ -85,12 +94,7 @@ class SampleLoader(Dataset):
                 data['depths'] = torch.stack(self.resize_depths_fill(list_depths, H // 4, W // 4))
             else:
                 data['depths'] = torch.stack(list_depths)
-            d = data['depths']
-            # data['ranges'] = [d[d>0].min() * 0.8, d.max() * 1.2]
-
-        if(self.options.get('return_set_id')):
-            data['set_name'] = set_name
-            data['ref_id'] = ref_id
+            data['depths'] /= scale
 
         return data
 
