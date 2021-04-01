@@ -107,12 +107,13 @@ class Camera:
         '''
         Rt = self.Rt
         t = self.t
+        wo = to_vector(self.C)
 
         # 1xHxWx3 * NxHxWx1
-        r = self.camera_rays()
-        p = from_vector(r * depth_maps)
-
-        return to_vector(Rt @ (p - t))
+        r = from_vector(self.camera_rays())
+        wr = Rt @ r
+        wr = wr / wr.norm(p=2, dim=-2, keepdim=True)
+        return to_vector(wr) * depth_maps + wo
 
     def to_world_normals(self, normal_maps):
         '''
@@ -184,42 +185,47 @@ class Camera:
         H, W = self.H, self.W
         Rt = self.Rt
 
-        depths = torch.linspace(1 / max_d, 1 / min_d, N + 1, device=dev).view(1, 1, 1, -1)
+        depths = 1 / torch.linspace(1 / min_d, 1 / max_d, N + 1, device=dev).view(1, 1, 1, -1)
         min_ds = depths[..., :-1]
         max_ds = depths[..., 1:]
-        sampled_depths = 1/ (torch.rand((1, H, W, N), dtype=torch.float, device=dev) * (max_ds - min_ds) + min_ds)
+        # 1xHxWxN
+        sampled_depths = torch.rand((1, H, W, N), dtype=torch.float, device=dev) * (max_ds - min_ds) + min_ds
         nhwd = sampled_depths.permute(3, 1, 2, 0)
-        rs = self.camera_rays()
 
         # NxHxWx3 world points, 1xHxWx3 directions
         dirs = to_vector(Rt @ from_vector(self.camera_rays()))
+        dirs = dirs / dirs.norm(p=2, dim=-1, keepdim=True)
         return nhwd, dirs 
-
-
-
 
     def sample(self, N, ranges):
         '''
         Given min/max ranges of depths, return sampled depths based on uniform distrb.
+
+        :returns: (HxW)xNxC shaped points, depths, directions 
         '''
         dev = self.K.device
         min_d, max_d = ranges
         H, W = self.H, self.W
         Rt = self.Rt
-        depths = torch.linspace(1 / max_d, 1 / min_d, N + 1, device=dev).view(1, 1, 1, -1)
+        t = self.t
+        C = self.C
+
+        depths = 1 / torch.linspace(1 / min_d, 1 / max_d, N + 1, device=dev).view(1, 1, 1, -1)
+        # sampled_depths = 1 / torch.linspace(1 / min_d, 1 / max_d, N, device=dev).view(1, 1, 1, -1)
+        # sampled_depths = sampled_depths.repeat(1, H, W, 1)
+        # 1xHxWxN
         min_ds = depths[..., :-1]
         max_ds = depths[..., 1:]
-        # 1xHxWxN
-        sampled_depths = 1/ (torch.rand((1, H, W, N), dtype=torch.float, device=dev) * (max_ds - min_ds) + min_ds)
+        sampled_depths = torch.rand((1, H, W, N), dtype=torch.float, device=dev) * (max_ds - min_ds) + min_ds
+
         nhwd = sampled_depths.permute(3, 1, 2, 0)
-        rs = self.camera_rays()
 
-        # NxHxWx3 world points, 1xHxWx3 directions
-        pts = self.back_project(nhwd)
+        # 1xHxWx3 * NxHxWx1
         dirs = to_vector(Rt @ from_vector(self.camera_rays()))
+        dirs = dirs / dirs.norm(p=2, dim=-1, keepdim=True)
 
-        # dirs = rs
-        # pts = rs * nhwd
+        cam_pos = self.C.view(1, 1, 1, 3)
+        pts = cam_pos + dirs * nhwd
 
         return pts, nhwd, dirs 
 

@@ -16,9 +16,17 @@ default_options = {
         'type': float,
         'default': 0.7
     },
-    'nerf_num_depths':{
+    'nerf_num_train_depths':{
         'type': int,
-        'default': 32
+        'default': 64
+    },
+    'nerf_num_fine_depths':{
+        'type': int,
+        'default': 128
+    },
+    'nerf_num_coarse_depths':{
+        'type': int,
+        'default': 64
     },
     'nerf_network_depth':{
         'type': int,

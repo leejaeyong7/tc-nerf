@@ -28,22 +28,13 @@ class SampleLoader(Dataset):
         set_name = sample['set_name']
         ref_id = sample['ref_id']
 
+        image_path = sample['image']
+        camera_path = sample['camera']
+
         # load from paths
-        images = [self.load_image(ip)for ip in sample['images']]
-        cameras = [self.load_camera(cam) for cam in sample['cameras']]
-
-        # convert to intrinsic / extrinsinc / ranges
-        intrinsics = [camera[0] for camera in cameras]
-        extrinsics = [camera[1] for camera in cameras]
-        ref_ranges = cameras[0][2]
+        image = self.load_image(image_path)
+        npK, npE, ref_ranges = self.load_camera(camera_path)
         ranges = self.get_depth_range(ref_ranges)
-
-        # convert to numpy arrays
-        np_intrinsics = np.stack(intrinsics)
-        np_extrinsics = np.stack(extrinsics)
-
-        # Nx3xHxW
-        list_images = [to_tensor(image) for image in images]
 
         # Nx3x3
         if(self.options.get('resize')):
@@ -51,50 +42,31 @@ class SampleLoader(Dataset):
         else:
             size = None
 
-        torch_intrinsics = torch.from_numpy(np_intrinsics)
+        K = torch.from_numpy(npK)
         if not (size is None):
-            torch_intrinsics = self.resize_intrinsics(torch_intrinsics, list_images, *size)
+            torch_intrinsics = self.resize_intrinsic(K, image, *size)
 
         # Nx4x4
-        torch_extrinsics = torch.from_numpy(np_extrinsics)
+        E = torch.from_numpy(npE)
 
         if not (size is None):
-            batch_images = torch.stack(self.resize_images(list_images, *size))
-        else:
-            batch_images = torch.stack(list_images)
+            image = self.resize_images(image, *size)
 
 
         # rescale so that the depth becomes clamped
         scale = ranges[0] * 0.75
         ranges[0] /= scale 
         ranges[1] /= scale 
-        torch_extrinsics[:, :, 3] /= scale 
+        E[:3, 3] /= scale 
 
         # if self.get_depth:
         # on training, additionally load in depths
         data = {
-            'images': batch_images,
-            'intrinsics': torch_intrinsics,
-            'extrinsics': torch_extrinsics,
+            'images': image,
+            'intrinsics': K,
+            'extrinsics': E,
             'ranges': ranges
         }
-
-
-        if ('depths' in sample) and (len(sample['depths']) > 0) and (not self.options.get('skip_depth')):
-            depths = [self.load_depth(dp) for dp in sample['depths']]
-            list_depths = [torch.from_numpy(depth).unsqueeze(0) for depth in depths]
-
-            
-            # resize depth give size
-            # else if depth is not resized into 1/4
-            if self.options.get('unscaled_depth'):
-                data['depths']= torch.stack(self.resize_depths_by_scale(list_depths, 0.25))
-            if not (size is None):
-                H, W = size
-                data['depths'] = torch.stack(self.resize_depths_fill(list_depths, H // 4, W // 4))
-            else:
-                data['depths'] = torch.stack(list_depths)
-            data['depths'] /= scale
 
         return data
 
@@ -110,7 +82,7 @@ class SampleLoader(Dataset):
         '''
         if(len(ranges) == 2):
             depth_start = 425.0
-            depth_end = 905.0
+            depth_end = 900.0
             return [depth_start, depth_end]
         else:
             depth_start = ranges[0]
@@ -124,7 +96,7 @@ class SampleLoader(Dataset):
 
     def load_image(self, image_full_path:Path)-> Image:
         ''' Loads image given full path '''
-        return Image.open(image_full_path)
+        return to_tensor(Image.open(image_full_path))
 
     def load_camera(self, camera_full_path:Path)-> tuple:
         ''' Loads camera given full path to file '''
@@ -134,27 +106,11 @@ class SampleLoader(Dataset):
             k[2, 2] = 1
         return k, e, r
 
-    def resize_images(self, images, height, width):
-        return [NF.interpolate(image.unsqueeze(0), size=(height, width), mode='bilinear')[0] for image in images]
+    def resize_image(self, image, height, width):
+        return NF.interpolate(image.unsqueeze(0), size=(height, width), mode='bilinear')[0]
 
-    def resize_intrinsics(self, K, images, height, width):
+    def resize_intrinsic(self, K, image, height, width):
         KC = K.clone()
-        for i, NK in enumerate(KC):
-            NK[0] *= float(width) / float(images[i].shape[-1])
-            NK[1] *= float(height) / float(images[i].shape[-2])
+        KC[0] *= float(width) / float(image.shape[-1])
+        KC[1] *= float(height) / float(image.shape[-2])
         return KC
-
-    def resize_depths_by_scale(self, depths, scale):
-        return [NF.interpolate(depth.unsqueeze(0), scale_factor=scale, mode='nearest')[0] for depth in depths]
-
-    def resize_depths_fill(self, depths, height, width):
-        TH, TW = height, width
-        resizeds = []
-        for depth in depths:
-            _, OH, OW = depth.shape
-            kernel = (OH // TH, OW // TW)
-
-
-            resized = NF.interpolate(NF.max_pool2d(depth.unsqueeze(0), kernel), (TH, TW), mode='nearest')
-            resizeds.append(resized[0])
-        return resizeds

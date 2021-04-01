@@ -1,30 +1,9 @@
 import torch
 import torch.nn as nn
+import time
 import torch.nn.functional as NF
 
-def from_homogeneous(points):
-    return points[:, :, :, :-1] / points[:, :, :, -1:]
-
-def to_homogeneous(points):
-    dims = list(points.shape)
-    dims[3] = 1
-    ones = torch.ones(tuple(dims), dtype=points.dtype, device=points.device)
-    return torch.cat((points, ones), 3)
-
-def to_vector(points):
-    return points.squeeze(-1)
-
-def from_vector(points):
-    return points.unsqueeze(-1)
-
-def to_bchw(bhwc):
-    return bhwc.permute(0, 3, 1, 2)
-
-def to_bhwc(bchw):
-    return bchw.permute(0, 2, 3, 1)
-
-def resize_bhwc(tensor, size, mode='nearest'):
-    return to_bhwc(NF.interpolate(to_bchw(tensor), size=size, mode=mode))
+from utils.transforms import *
 
 class Propagator(nn.Module):
     def __init__(self, hparams=None):
@@ -35,7 +14,9 @@ class Propagator(nn.Module):
 
         # register buffers
         self.pad = self.create_pad(prop_shape)
+        # self.register_buffer('kernel', self.create_kernel(prop_shape, 1))
         self.kernel = self.create_kernel(prop_shape, 1)
+        # self.register_buffer('kernel', self.create_kernel(prop_shape, 1))
 
     def define_shape(self):
         return torch.FloatTensor([
@@ -75,19 +56,29 @@ class Propagator(nn.Module):
         return kernel
 
 
-    def forward(self, propagatable):
+    def forward(self, propagatable, ranges, num_perts=3):
         '''
         Given 1xHxWxK propagatable geometry, 
         propagate them to SxHxWxK neighbors
+        NxHxWx1 => (NxP)xHxWx1 => (NxA)xHxWx1
         '''
         p = to_bchw(propagatable)
-        H, W = p.shape[-2:]
+        dev = propagatable.device
+        N, H, W = propagatable.shape[:3]
         # padded plane => 1x4xWxH => 1x1x4xHxW
         padded = self.pad(p)
-        C = 1
 
         # returns 1xS4xHxW => Sx4xHxW
-        propagated = to_bhwc(NF.conv2d(padded, self.kernel).view(-1, C, H, W))
+        propagated = NF.conv2d(padded, self.kernel).view(N, -1, H, W, 1)
+
+        min_d, max_d = ranges
+        # d_ranges= (max_d - min_d) / torch.arange(N+1, device=dev).view(-1, 1, 1, 1, 1).float()
+
+        pert_scale = (max_d - min_d) / 256
+        d_pert_scale = pert_scale * 3 * 2 ** -torch.arange(num_perts, device=dev).view(1, -1, 1, 1, 1).float()
+        d_perts = d_pert_scale * (torch.rand((N, num_perts, H, W, 1), device=dev) * 2 - 1)
+        pert_d = (propagatable.unsqueeze(1) + d_perts).clamp(min_d, max_d)
 
         # ensure good views for all propagated values
-        return propagated 
+        # NxPxHxWx1
+        return torch.cat((propagated, pert_d), 1).sort(1).values

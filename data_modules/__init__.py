@@ -1,3 +1,3 @@
-from .dtu import DTULR
+from .dtu import DTULR, DTUHR
 
-__all__ = ['DTULR']
+__all__ = ['DTULR', 'DTUHR']

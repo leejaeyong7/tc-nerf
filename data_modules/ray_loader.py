@@ -12,8 +12,8 @@ from torchvision.transforms.functional import to_tensor
 class RayLoader(Dataset):
     def __init__(self, samples, options):
         super(RayLoader, self).__init__()
-        self.samples = self.generate_rays_from_samples(samples)
         self.options = options
+        self.samples = self.generate_rays_from_samples(samples)
 
     def __len__(self) -> int:
         '''
@@ -28,8 +28,8 @@ class RayLoader(Dataset):
     def generate_rays_from_samples(self, samples):
         data = []
         for sample in samples:
-            image_path = sample['images']
-            camera_path = sample['images']
+            image_path = sample['image']
+            camera_path = sample['camera']
             image = self.load_image(image_path)
             npK, npE, ref_ranges = self.load_camera(camera_path)
             ranges = self.get_depth_range(ref_ranges)
@@ -46,38 +46,40 @@ class RayLoader(Dataset):
 
             # Nx4x4
             E = torch.from_numpy(npE)
+
             if not (size is None):
                 image = self.resize_image(image, *size)
 
-            H, W = image.shape[2:]
+            H, W = image.shape[-2:]
 
             # rescale so that the depth becomes clamped
             scale = ranges[0] * 0.75
             ranges[0] /= scale 
             ranges[1] /= scale 
-            E[:, 3] /= scale 
+            E[:3, 3] /= scale 
             R = E[:3, :3]
             t = E[:3, 3:]
 
             # 3xHW
             cam_rays = self.camera_rays(K, H, W)
             world_rays = R.t() @ cam_rays
+            world_rays = world_rays / world_rays.norm(p=2, dim=0, keepdim=True)
             world_pos = (-R.t() @ t)
 
             # obtain rays based on the K, E = 3xHxW
             # obtain colors = 3xHxW
             # obtain ranges = 
             colors = image.view(3, -1)
-            directions = world_rays.view(3, -1)
+            dirs = world_rays.view(3, -1)
             pos = world_pos.view(3, 1).repeat(1, H*W)
             rs = torch.FloatTensor(ranges).view(2, 1).repeat(1, H*W)
 
             # (3+3+3+2)xH*W
-            dat = torch.cat((colors, directions, pos, rs), dim=-1)
+            dat = torch.cat((colors, dirs, pos, rs), dim=0)
             data.append(dat)
 
         # (N*H*W)x(3+3+3+2)
-        return torch.cat(dat,  dim=-1).t()
+        return torch.cat(data,  dim=-1).t()
 
     def get_depth_range(self, ranges):
         '''
@@ -91,7 +93,7 @@ class RayLoader(Dataset):
         '''
         if(len(ranges) == 2):
             depth_start = 425.0
-            depth_end = 905.0
+            depth_end = 900.0
             return [depth_start, depth_end]
         else:
             depth_start = ranges[0]
@@ -105,7 +107,7 @@ class RayLoader(Dataset):
 
     def load_image(self, image_full_path:Path)-> Image:
         ''' Loads image given full path '''
-        return Image.open(image_full_path)
+        return to_tensor(Image.open(image_full_path))
 
     def load_camera(self, camera_full_path:Path)-> tuple:
         ''' Loads camera given full path to file '''

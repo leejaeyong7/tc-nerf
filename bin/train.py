@@ -12,6 +12,8 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 import torch
+torch.backends.cudnn.enabled=True
+torch.backends.cudnn.benchmark = False
 from torch.utils.data import DataLoader
 
 # setup locaml
@@ -47,7 +49,7 @@ def main(args, hparams):
                                          checkpoint_callback=checkpoint_callback)
 
     # setup data module
-    data_module = getattr(DataModules, args.dataset)(data_path, options=vars(args), num_views=1)
+    data_module = getattr(DataModules, args.dataset)(data_path, options=vars(args), num_views=1, batch_size=args.batch_size)
     data_module.prepare_data()
     data_module.setup('fit')
 

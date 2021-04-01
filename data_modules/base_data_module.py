@@ -40,7 +40,7 @@ class BaseDataModule(pl.LightningDataModule):
         # setup variables shared by all datasets
         self.dataset_dir = Path(dataset_dir)
         self.num_views = num_views
-        self.batch_size = 1
+        self.batch_size = batch_size
         self.options = options
 
     def image_folder_name(self):
@@ -55,7 +55,7 @@ class BaseDataModule(pl.LightningDataModule):
     def pair_file(self):
         return 'pair.txt'
 
-    def get_samples_from_sets(self, target_sets, num_views, train=False):
+    def get_samples_from_sets(self, target_sets, train=False):
         # iterate over sets
         samples = []
         for target_set in target_sets:
@@ -73,64 +73,35 @@ class BaseDataModule(pl.LightningDataModule):
             all_image_ids = list(pairs.keys())
             for ref_image_id, neighbor_list in pairs.items():
                 if(train):
-                    if (ref_image_id % 12) == 0:
+                    if ((ref_image_id % 12) == 0) :#and (ref_image_id != 0):
                         continue
                 else:
                     if (ref_image_id % 12) != 0:
                         continue
 
-
-                neigh_image_ids = [ref_image_id] + neighbor_list
-
-                neigh_image_hash = {}
-                for n_id in neigh_image_ids:
-                    neigh_image_hash[n_id] = n_id
-
-                remaining_hash = {}
-                for image_id in all_image_ids:
-                    if not (image_id in neigh_image_hash):
-                        remaining_hash[image_id] = image_id
-                remainig_ids = list(remaining_hash.keys())
-                selected_image_ids = neigh_image_ids[:num_views]
-
+                image_path = self.get_image_path(image_dir, ref_image_id)
+                camera_path = self.get_camera_path(camera_dir, ref_image_id)
 
                 sample = {
                     'set_name': target_set,
                     'ref_id': ref_image_id,
-                    'images': [],
-                    'cameras': [],
-                    'depths': []
+                    'image': image_path,
+                    'camera': camera_path,
                 }
 
-                for image_id in selected_image_ids:
-                    image_path = self.get_image_path(image_dir, image_id)
-                    camera_path = self.get_camera_path(camera_dir, image_id)
-
-                    sample['images'].append(image_path)
-                    sample['cameras'].append(camera_path)
-                    if not(self.options.get('skip_depth')):
-                        depth_path = self.get_depth_path(depth_dir, image_id)
-                        sample['depths'].append(depth_path)
                 samples.append(sample)
         return samples
 
     def setup(self, stage=None):
         if (stage == 'fit') or (stage == None):
-            try:
-                train_sets = self.get_train_sets()
-                num_views = self.num_views if not self.options.get('num_train_views') else self.options['num_train_views']
-                train_samples = self.get_samples_from_sets(train_sets, num_views, True)
-                self.train_dataset = RayLoader(train_samples, self.options)
-            except Exception as e:
-                print(repr(e))
-                raise Exception("Training data must be present!")
+            train_sets = self.get_train_sets()
+            val_sets = self.get_val_sets()
 
-            try:
-                val_sets = self.get_val_sets()
-                val_samples = self.get_samples_from_sets(val_sets, num_views)
-                self.val_dataset = SampleLoader(val_samples, self.options)
-            except:
-                self.val_dataset = None
+            train_samples = self.get_samples_from_sets(train_sets, True)
+            val_samples = self.get_samples_from_sets(val_sets)
+
+            self.train_dataset = RayLoader(train_samples, self.options)
+            self.val_dataset = SampleLoader(val_samples, self.options)
 
         if (stage == 'test') or (stage == None):
             try:
@@ -142,7 +113,7 @@ class BaseDataModule(pl.LightningDataModule):
                 raise Exception('Test data must be present!')
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=None, shuffle=True)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True)
 
     def val_dataloader(self):
         if(self.val_dataset):

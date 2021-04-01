@@ -21,12 +21,16 @@ class NeRF(nn.Module):
                 nn.Linear(self.C, self.C) 
                 if i not in self.skips 
                 else nn.Linear(self.C + self.input_ch, self.C) 
-                for i in range(self.D - 1) 
+                for i in range(1, self.D) 
             ]
         )
         
         ### Implementation according to the official code release (https://github.com/bmild/nerf/blob/master/run_nerf_helpers.py#L104-L105)
-        self.views_linears = nn.ModuleList([nn.Linear(self.input_ch_views + self.C, self.C//2)])
+        self.views_linear = nn.Sequential(
+            # nn.Linear(self.input_ch_views + self.C, self.C//2),
+            nn.Linear(self.input_ch_views + self.C, self.C//2),
+            nn.ReLU()
+        )
 
         self.feature_linear = nn.Linear(self.C, self.C)
         self.alpha_linear = nn.Linear(self.C, 1)
@@ -38,28 +42,29 @@ class NeRF(nn.Module):
     def forward_points(self, points):
         p = points
         for i, l in enumerate(self.pts_linears):
-            p = l(p)
-            p = NF.relu(p)
             if i in self.skips:
                 p = torch.cat([points, p], -1)
+            p = l(p)
+            p = NF.relu(p)
 
         return self.alpha_linear(p)
 
     def forward(self, points, views):
+        """
+        points: BxPC
+        views: BxDC
+
+        """
         p = points
         for i, l in enumerate(self.pts_linears):
-            p = l(p)
-            p = NF.relu(p)
             if i in self.skips:
                 p = torch.cat([points, p], -1)
+            p = l(p)
+            p = NF.relu(p)
 
         alpha = self.alpha_linear(p)
         feature = self.feature_linear(p)
         p = torch.cat([feature, views], -1)
-    
-        for i, l in enumerate(self.views_linears):
-            p = self.views_linears[i](p)
-            p = NF.relu(p)
-
+        p = self.views_linear(p)
         rgb = self.rgb_linear(p)
         return rgb, alpha

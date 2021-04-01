@@ -16,11 +16,11 @@ class DTU(BaseDataModule):
                 106, 117]
     test_sets = [1, 4, 9, 10, 11, 12, 13, 15, 23, 24, 29, 32, 33, 34, 48, 49,
                  62, 75, 77, 110, 114, 118]
-    train_sets = [2]
-    val_sets = [2]
+    train_sets = [1]
+    val_sets = [1]
 
-    def __init__(self, dataset_dir, num_views=10, options={}):
-        super(DTU, self).__init__(dataset_dir,  num_views, options=options)
+    def __init__(self, *args, **kwargs):
+        super(DTU, self).__init__(*args, **kwargs)
 
     def get_train_sets(self)->list:
         self.mode = 'train'
@@ -48,12 +48,12 @@ class DTU(BaseDataModule):
             list containing min, max depth
         '''
         depth_start = 425.0
-        depth_end = 905.0
+        depth_end = 900.0
         return [depth_start, depth_end]
 
 class DTULR(DTU):
-    def __init__(self, dataset_dir, num_views=10, options={}):
-        super(DTULR, self).__init__(dataset_dir / 'dtu_mvsnet',  num_views, {**options, **{'scaled_camera': True, 'scaled_depth': True}})
+    def __init__(self, dataset_dir, options={}, *args, **kwargs):
+        super(DTULR, self).__init__(dataset_dir / 'dtu_mvsnet',  options={**options, **{'scaled_camera': True, 'scaled_depth': True}}, *args, **kwargs)
 
     def parse_camera(self, camera_file_path: str) -> tuple:
         '''
@@ -69,5 +69,5 @@ class DTULR(DTU):
         return K, E, tokens
 
 class DTUHR(DTU):
-    def __init__(self, dataset_dir, num_views=10, options={}):
-        super(DTULR, self).__init__(dataset_dir / 'dtu_mine',  num_views, {**options})
+    def __init__(self, dataset_dir, *args, **kwargs):
+        super(DTUHR, self).__init__(dataset_dir / 'dtu_mine',  *args, **kwargs)
